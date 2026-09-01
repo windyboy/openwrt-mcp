@@ -97,6 +97,12 @@ job. WiFi pre-shared keys (`key='...'`) are the secret and are redacted.
   gone, so the former unauthenticated-local-HTTP and
   `MCP_UNSAFE_PUBLIC_ACCESS_CONFIRMED` limitations no longer apply. The only
   process boundary is stdio owned by the MCP client.
+- **Transitive `starlette` / `uvicorn`.** Direct deps no longer include
+  them. Installing `fastmcp` still installs `fastmcp-slim[client,server]`,
+  whose `server` extra requires `mcp`, and the MCP Python SDK lists
+  `sse-starlette`, `starlette`, and `uvicorn` as required (not extras).
+  `fastmcp-slim[client]` is client-only and cannot run this stdio server.
+  Those packages sit unused in the venv; this process never binds TCP.
 - **Single-router assumption.** Host-key pinning is per host:port, not per
   fingerprint — you can have one entry per router.
 - **`OPENWRT_HOST_KEY_POLICY=none`** explicitly disables all host-key checks.
