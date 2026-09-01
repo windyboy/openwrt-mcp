@@ -8,16 +8,12 @@ src_dir: "src/openwrt_mcp/"
 package: "openwrt_mcp"
 project: "openwrt-mcp"
 python_version: "3.14"
-image_name: "openwrt-mcp:test"
-smoke_name: "openwrt-smoke"
-health_port: 9094
-rest_port: 9096
-use_docker: true
+use_docker: false
 is_mcp: true
 expected_tools: 24
 use_codecov: true
 use_semgrep: true
 use_dependabot: true
-package_ecosystems: ["github-actions", "pip", "docker"]
+package_ecosystems: ["github-actions", "pip"]
 use_docs_validation: false
 services: null
