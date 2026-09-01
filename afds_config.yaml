@@ -1,10 +1,20 @@
-# AFDS Validator Configuration for openwrt-mcp project
+# AFDS Validator Configuration for openwrt-mcp
+#
+# CAFDS HTTP validator is not in CI (`use_docs_validation: false`).
+# Keep this map in sync with docs/meta/doc-registry.md.
+#
+# AFDS-shaped spec: docs/openwrt-mcp.md
+# Exempt: operator prose without AFDS frontmatter, plus meta/template.
 
 exempt_files:
   - README.md
   - CHANGELOG.md
+  - CONTRIBUTING.md
+  - docs/ARCHITECTURE.md
+  - docs/SECURITY.md
   - docs/meta/doc-registry.md
   - docs/meta/glossary.md
+  - docs/templates/doc-template.md
 
 default_paths:
   - docs/
@@ -12,4 +22,5 @@ default_paths:
 excluded_dirs:
   - archived
   - archive
-  - docs/meta  # meta files (doc-registry.md, glossary.md) are exempt from AFDS validation
+  - docs/meta
+  - docs/templates

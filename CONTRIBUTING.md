@@ -18,9 +18,11 @@ uv run ruff format --check .       # format check
 uv run mypy src/openwrt_mcp --strict   # type check
 ```
 
-Integration tests under `tests/integration/` require a real OpenWRT router and
-are skipped by default — set `OPENWRT_INTEGRATION=1` and provide the same env
-vars the server uses (`OPENWRT_HOST`, `OPENWRT_SSH_KEY`, ...).
+Real-router tests under `tests/integration/test_real_router.py` skip unless
+`OPENWRT_HOST` is set to a non-placeholder and `OPENWRT_SSH_KEY` exists.
+Use the same XDG env as the server (`~/.config/openwrt-mcp/env` or a
+project `.env`). Write tools are never run against a live router; they are
+mocked in `tests/unit/test_write_tools_mocked.py`.
 
 ## Running locally
 

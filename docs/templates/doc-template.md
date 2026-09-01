@@ -10,7 +10,7 @@ ai_scope: editable
 source_of_truth: false
 upstream:
   - ref.documentation-standard
-last_verified: 2026-05-11
+last_verified: 2026-09-01
 owners: ["backend-team"]
 ---
 
@@ -18,6 +18,10 @@ owners: ["backend-team"]
 
 Copy this file and fill in placeholders to create a new
 AFDS-compliant document. See the AFDS standard for detailed rules.
+
+New docs must match the 4.0.0 facts: stdio-only MCP, `uv tool install`
+plus XDG env/audit/TOFU, write-path metachar + UCI value allowlist.
+Do not reintroduce SSE, REST, Docker, or HTTP sidecar instructions.
 
 ## PURPOSE
 

@@ -28,7 +28,7 @@ without any ability to modify the system by default.
 Key design decisions:
 - Read-only by default — all SSH commands are whitelisted; write operations
   require `ENABLE_WRITE_OPERATIONS=1`
-- Command whitelist — only explicit read-only patterns allowed
+- Command allowlists — read vs write; metachar blocklist on both
 - Python-side command validation before SSH execution
 - Standalone single Python process, no external databases
 
@@ -59,23 +59,24 @@ Key design decisions:
 
 ## RULES
 
-1. System MUST validate all SSH commands through
-   `SecurityValidator.validate_command()` before execution
-2. System MUST block shell metacharacters: ; | & $ ` ( ) { } < > \0
-3. System MUST block destructive commands: rm, reboot, halt, poweroff,
-   wget, curl, dd, mkfs, mv, chmod, chown
-4. System MUST block UCI write operations: uci set, add, remove,
-   delete, rename, revert, commit
-5. System MUST block package modifications: opkg install, remove,
-   upgrade, update, configure
-6. System MUST block pipe-to-shell patterns: | sh, | bash, | ash
-7. System MUST use try/except Exception in every tool wrapper
-8. System MUST return structured JSON with `"success"` boolean from
+1. Read-path SSH MUST pass `SecurityValidator.validate_command()`
+   (metachar blocklist, then `BLOCKED_PATTERNS`, then `ALLOWED_PATTERNS`)
+2. Write-path SSH MUST pass `validate_write_command()` (same metachar
+   blocklist, then `ALLOWED_WRITE_PATTERNS`). Writes are registered only
+   when `ENABLE_WRITE_OPERATIONS=1`
+3. `uci set` values MUST match `[A-Za-z0-9_.,:/@-]+` in the writer
+   before interpolation into SSH
+4. Read path MUST reject UCI writes (`uci set|commit|…`), package
+   mutations, `rm`/`reboot`/`halt`, and pipe-to-shell
+5. System MUST use try/except Exception in every tool wrapper
+6. System MUST return structured JSON with `"success"` boolean from
    every tool
-9. System MUST return `_meta` envelope with `request_id`, `duration_ms`,
+7. System MUST return `_meta` envelope with `request_id`, `duration_ms`,
    and `tool_version` for observed tools
-10. System MUST log only to stderr — stdout corrupts MCP transport
-11. System MUST speak MCP over stdio only (no HTTP sidecars)
+8. System MUST log only to stderr — stdout corrupts MCP transport
+9. System MUST speak MCP over stdio only (no HTTP sidecars)
+10. Operator MCP clients MUST exec a frozen `uv tool install` binary
+    (or `~/.config/openwrt-mcp/run`), not `uv run` in the git tree
 
 ## INTERFACES
 
@@ -139,7 +140,7 @@ Most I/O tools accept an optional `timeout_seconds` parameter (default: SSH_TIME
 
 Success:
 ```json
-{"success": true, "data": <any>, "_meta": {"request_id": "...", "duration_ms": 42, "tool_version": "1.2.0", "cached": false, "retry_safe": true}}
+{"success": true, "data": <any>, "_meta": {"request_id": "...", "duration_ms": 42, "tool_version": "4.0.0", "cached": false, "retry_safe": true}}
 ```
 
 Error:
@@ -195,8 +196,8 @@ src/openwrt_mcp/
     registration.py       # register_openwrt_tools — 24 MCP tool wrappers
   __main__.py              # python -m entry point
 tests/
-  unit/                   # 200 unit tests (all mocked, no I/O)
-  integration/            # 53 integration tests (in-process MCP + real router)
+  unit/                   # mocked unit tests (no I/O)
+  integration/            # in-process MCP + optional real-router reads
   smoke/                  # response-contract smoke tests
   e2e/                    # end-to-end tests (in-process MCP)
 ```
@@ -220,6 +221,8 @@ Optional:
 | ENABLE_AUDIT_LOGGING | true | Log all executed commands |
 | AUDIT_LOG_FILE | ~/.local/state/openwrt-mcp/audit.log | Audit log file path |
 | ENABLE_WRITE_OPERATIONS | false | Set to `1` or `true` to enable write tools (uci_set, uci_commit, restart_interface, reload_network, reboot_device) |
+| OPENWRT_HOST_KEY_POLICY | tofu | `tofu` (default) or `none` |
+| OPENWRT_KNOWN_HOSTS | — | Optional OpenSSH known_hosts path (strict) |
 
 ### Assumptions
 
@@ -241,7 +244,9 @@ Optional:
 - Write operations disabled by default; require `ENABLE_WRITE_OPERATIONS=1`
 - No configuration changes, package installations, or upgrades
 - DHCP logs require `log_dhcp` option enabled in dnsmasq config
-- Audit log file grows unbounded — rotation is operator responsibility
+- Audit log rotates at 5 MB (`audit.log` → `audit.log.1`)
+- Direct deps omit `starlette`/`uvicorn`; FastMCP still pulls them via
+  `mcp`. This process never binds TCP (see `docs/SECURITY.md`)
 
 ### Risks and Caveats
 
@@ -266,16 +271,18 @@ cause irreversible side effects:
 #### Write Command Validation Boundary
 
 Write commands use a **separate validation path** (`execute_write()`
-in `SSHConnection`) that checks `ALLOWED_WRITE_PATTERNS`. The standard
-`execute()` path checks only `ALLOWED_PATTERNS` and **will reject**
-any write command (ifdown, uci set/commit, ubus call system reboot,
-init.d script reload). This boundary ensures read-only tools
-can never accidentally execute write operations, even if the tool
-code is modified.
+in `SSHConnection`) that runs the same `DANGEROUS_METACHARACTERS`
+blocklist as reads, then `ALLOWED_WRITE_PATTERNS`. `uci set` values
+must match `[A-Za-z0-9_.,:/@-]+` in `OpenWRTWriter.uci_set` before SSH.
+The standard `execute()` path uses `ALLOWED_PATTERNS` only and
+**rejects** write commands (ifdown, uci set/commit, reboot, init.d
+reload). Read-only tools cannot execute writes even if a wrapper
+is wrong.
 
-Unit tests in `TestSecurityValidatorWriteCommands` enforce this
-separation — every write command is verified to be rejected by
-`validate_command()` and accepted only by `validate_write_command()`.
+Unit tests (`TestSecurityValidatorWriteCommands`,
+`TestWritePathValidation`) enforce that split: write commands fail
+`validate_command()` and pass `validate_write_command()` only when
+they are allowlisted and metachar-free.
 
 #### Mock Testing Strategy
 
@@ -362,9 +369,16 @@ pytest tests/ --cov=openwrt_mcp --cov-fail-under=80 -v
 - Does not define client-side MCP tool calling patterns
 - Does not replace OpenWRT vendor documentation
 - Does not handle credential rotation or key management
-- Does not define log retention or rotation policy
+- Does not ship Docker / compose / HTTP MCP sidecars (removed in 4.0.0)
+- Does not drop FastMCP's transitive `starlette`/`uvicorn` (SDK required)
 
 ## CHANGELOG
+
+### [4.0.0] — 2026-09-01
+- stdio only; SSE / Health / REST and Docker packaging removed
+- Operator path: `uv tool install` + XDG env/audit/TOFU
+- Write-path metachar blocklist + `uci set` value allowlist
+- FastMCP still pulls unused `starlette`/`uvicorn` via `mcp`
 
 ### [1.2.0] — 2026-05-12
 - Added get_router_context, describe_router_capabilities — unified context and introspection
