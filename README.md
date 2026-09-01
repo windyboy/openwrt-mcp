@@ -23,8 +23,8 @@ MCP client ──► openwrt-mcp ──► SSH ──► OpenWRT router
 - **SSH host-key verification** with trust-on-first-use by default and a
   clear refusal on key change.
 - **Audit log** with 5 MB rotation and timestamped request IDs.
-- **Two transports** — local **stdio** (preferred for single-user setups)
-  or SSE on `127.0.0.1:9095` for HTTP-based clients.
+- **stdio transport only** — the MCP client owns the process lifecycle.
+  There is no HTTP sidecar.
 - **Secret redaction** at the response boundary: WiFi PSKs, passwords, and
   tokens cannot leak even if a tool forgets to sanitise.
 
@@ -55,17 +55,10 @@ The SSH key must already be authorised on the router
 
 ## Run
 
-**stdio** — preferred for local MCP clients:
+stdio only — the MCP client (opencode, Claude Desktop, …) owns the process:
 
 ```bash
-uv run openwrt-mcp --transport stdio
-```
-
-**SSE** — for HTTP-based MCP clients (LibreChat, …). Also starts a health
-endpoint on `:9094` and a REST API on `:9096`:
-
-```bash
-uv run openwrt-mcp --transport sse
+uv run openwrt-mcp
 ```
 
 Wire it into opencode's `mcp` config:
@@ -76,7 +69,7 @@ Wire it into opencode's `mcp` config:
     "openwrt": {
       "type": "local",
       "command": ["uv", "run", "--directory", "/path/to/openwrt-mcp",
-                  "openwrt-mcp", "--transport", "stdio"],
+                  "openwrt-mcp"],
       "environment": {
         "OPENWRT_HOST": "192.168.1.1",
         "OPENWRT_SSH_KEY": "/home/you/.ssh/openwrt_mcp_ed25519",
@@ -102,10 +95,6 @@ Wire it into opencode's `mcp` config:
 | `ENABLE_WRITE_OPERATIONS` | `false` | Set to `true` to register write tools |
 | `ENABLE_AUDIT_LOGGING` | `true` | Log every executed command |
 | `AUDIT_LOG_FILE` | `/app/log/openwrt_mcp.log` | Audit log path |
-| `MCP_TRANSPORT` | `sse` | `sse` or `stdio` (also `--transport` flag) |
-| `MCP_SSE_PORT` | `9095` | SSE port (sse transport only) |
-| `HEALTH_PORT` | `9094` | Health port (sse transport only) |
-| `REST_API_PORT` | `9096` | REST port (sse transport only) |
 | `LOG_LEVEL` | `INFO` | Standard logging level |
 
 ## Security model
@@ -118,7 +107,7 @@ the router's identity, and leave an audit trail of every command.
 ## Architecture
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the module map,
-transports, and the security layers in execution order.
+transport, and the security layers in execution order.
 
 ## Development
 

@@ -27,9 +27,6 @@ OPENWRT_KNOWN_HOSTS = os.getenv("OPENWRT_KNOWN_HOSTS", "") or (
 )
 HOST_KEY_POLICY = os.getenv("OPENWRT_HOST_KEY_POLICY", "tofu").lower()
 
-MCP_SSE_PORT = int(os.getenv("MCP_SSE_PORT", "9095"))
-REST_API_PORT = int(os.getenv("REST_API_PORT", "9096"))
-HEALTH_PORT = int(os.getenv("HEALTH_PORT", "9094"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 ENABLE_WRITE_OPERATIONS = os.getenv("ENABLE_WRITE_OPERATIONS", "false").lower() in (
     "1",

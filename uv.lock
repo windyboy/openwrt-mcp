@@ -910,13 +910,11 @@ wheels = [
 
 [[package]]
 name = "openwrt-mcp"
-version = "1.2.1"
+version = "4.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "asyncssh" },
     { name = "fastmcp" },
-    { name = "starlette" },
-    { name = "uvicorn" },
 ]
 
 [package.optional-dependencies]
@@ -941,8 +939,6 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=7.1.0" },
     { name = "pytest-mock", marker = "extra == 'dev'", specifier = ">=3.15.1" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.15.13" },
-    { name = "starlette", specifier = ">=1.0.0" },
-    { name = "uvicorn", specifier = ">=0.47.0" },
 ]
 provides-extras = ["dev"]
 
