@@ -174,7 +174,7 @@ class SecurityValidator:
     @classmethod
     def validate_uci_value(cls, value: str) -> tuple[bool, str]:
         """Return whether a UCI option value is safe to interpolate."""
-        if not value or not isinstance(value, str) or not cls.UCI_VALUE_RE.fullmatch(value):
+        if not isinstance(value, str) or not cls.UCI_VALUE_RE.fullmatch(value):
             return False, "UCI value contains disallowed characters"
         return True, "ok"
 

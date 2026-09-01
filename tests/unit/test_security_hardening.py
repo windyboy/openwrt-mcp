@@ -89,6 +89,10 @@ class TestWritePathValidation:
         assert ok, msg
         ok, msg = SecurityValidator.validate_uci_value("/etc/config/network")
         assert ok, msg
+        ok, _ = SecurityValidator.validate_uci_value("")
+        assert not ok
+        ok, _ = SecurityValidator.validate_uci_value(0)  # type: ignore[arg-type]
+        assert not ok
 
 
 # ---------------------------------------------------------------------------
