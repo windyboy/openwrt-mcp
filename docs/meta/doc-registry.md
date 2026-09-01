@@ -18,7 +18,7 @@ owners: ["backend-team"]
 
 | doc_id | File | Type | Status | Description |
 |--------|------|------|--------|-------------|
-| ref.openwrt-mcp | README.md | ref | active | Operator install, XDG, stdio |
+| ref.readme | README.md | ref | active | Operator install, XDG, stdio |
 | ref.openwrt-mcp | docs/openwrt-mcp.md | ref | active | Complete project reference |
 | ref.architecture | docs/ARCHITECTURE.md | ref | active | Module map, transport, layers |
 | ref.security | docs/SECURITY.md | ref | active | Threat model, allowlists, limitations |
