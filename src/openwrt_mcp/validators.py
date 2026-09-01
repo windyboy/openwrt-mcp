@@ -86,6 +86,9 @@ class SecurityValidator:
         "$",
         "{",
         "}",
+        # Command separators for shells that treat them as new commands.
+        "\n",
+        "\r",
     ]
 
     BLOCKED_PATTERNS = [
@@ -129,10 +132,11 @@ class SecurityValidator:
         cmd_stripped = command.strip()
         cmd_lower = cmd_stripped.lower()
 
+        # NOTE: ">" is intentionally NOT a blocked metacharacter — the read
+        # allowlist permits the exact suffix " 2>/dev/null", and BLOCKED_PATTERNS
+        # reject every other redirect target ("> /tmp/x", "> /etc/...").
         for char in cls.DANGEROUS_METACHARACTERS:
             if char in cmd_stripped:
-                if char == ">" and re.search(r"2>/dev/null", cmd_stripped):
-                    continue
                 return False, f"Blocked dangerous character: '{char}'"
 
         for pattern in cls.BLOCKED_PATTERNS:

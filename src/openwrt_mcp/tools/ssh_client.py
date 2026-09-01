@@ -1,6 +1,8 @@
 """SSH connection manager for the OpenWRT router."""
 
 import asyncio
+import base64
+import hashlib
 import logging
 import time
 from datetime import datetime
@@ -11,6 +13,7 @@ from openwrt_mcp.observability import get_request_id
 from openwrt_mcp.tools.constants import (
     AUDIT_LOG_FILE,
     ENABLE_AUDIT_LOGGING,
+    HOST_KEY_POLICY,
     OPENWRT_HOST,
     OPENWRT_KNOWN_HOSTS,
     OPENWRT_PASSWORD,
@@ -18,8 +21,29 @@ from openwrt_mcp.tools.constants import (
     OPENWRT_SSH_KEY,
     OPENWRT_USER,
     SSH_TIMEOUT,
+    TOFU_KNOWN_HOSTS_PATH,
 )
 from openwrt_mcp.validators import SecurityValidator
+
+_AUDIT_LOG_MAX_BYTES = 5 * 1024 * 1024
+
+
+def _host_pattern(host: str, port: int) -> str:
+    """known_hosts host field for a host:port pair."""
+    return f"[{host}]:{port}" if port != 22 else host
+
+
+def _known_hosts_entry(host: str, port: int, public_key_line: str) -> str:
+    """One known_hosts line: '<host pattern> ssh-ed25519 AAAA...'."""
+    return f"{_host_pattern(host, port)} {public_key_line.strip()}"
+
+
+def _key_fingerprint(public_key_line: str) -> str:
+    """ssh-keygen style SHA256 fingerprint of an OpenSSH public key line."""
+    parts = public_key_line.strip().split()
+    blob = parts[1] if len(parts) >= 2 else public_key_line.strip()
+    digest = hashlib.sha256(base64.b64decode(blob)).digest()
+    return "SHA256:" + base64.b64encode(digest).decode().rstrip("=")
 
 
 class SSHConnection:
@@ -54,11 +78,12 @@ class SSHConnection:
                     pass
 
             try:
+                known_hosts_arg, tofu_pin = self._resolve_host_key_policy()
                 connect_kwargs = {
                     "host": OPENWRT_HOST,
                     "port": OPENWRT_PORT,
                     "username": OPENWRT_USER,
-                    "known_hosts": OPENWRT_KNOWN_HOSTS or None,
+                    "known_hosts": known_hosts_arg,
                     "connect_timeout": SSH_TIMEOUT,
                     "login_timeout": SSH_TIMEOUT,
                 }
@@ -72,14 +97,71 @@ class SSHConnection:
 
                 self._connection = await asyncssh.connect(**connect_kwargs)
                 self._last_activity = time.time()
+                if tofu_pin:
+                    await self._pin_host_key()
                 logging.info(
                     "[openwrt] SSH connection established: %s@%s", OPENWRT_USER, OPENWRT_HOST
                 )
                 return True
 
             except Exception as e:
-                logging.error("[openwrt] SSH connection error: %s", str(e))
+                msg = str(e)
+                if "host key" in msg.lower() or "not verified" in msg.lower():
+                    logging.error(
+                        "[openwrt] HOST KEY VERIFICATION FAILED for %s:%s. "
+                        "If this key change is intentional, update the known-hosts "
+                        "store at %s (or set OPENWRT_HOST_KEY_POLICY=none to opt out). "
+                        "Refusing to connect.",
+                        OPENWRT_HOST,
+                        OPENWRT_PORT,
+                        TOFU_KNOWN_HOSTS_PATH,
+                    )
+                else:
+                    logging.error("[openwrt] SSH connection error: %s", msg)
                 return False
+
+    @staticmethod
+    def _resolve_host_key_policy() -> tuple[Any, bool]:
+        """Return (asyncssh known_hosts argument, tofu_pin flag).
+
+        - HOST_KEY_POLICY=none      -> (None, False): legacy accept-any behaviour
+        - OPENWRT_KNOWN_HOSTS set   -> strict verification against that file
+        - TOFU store exists         -> strict verification against the store
+        - otherwise                 -> (None, True): pin key on first connect
+        """
+        if HOST_KEY_POLICY == "none":
+            return None, False
+        if OPENWRT_KNOWN_HOSTS:
+            return OPENWRT_KNOWN_HOSTS, False
+        if Path(TOFU_KNOWN_HOSTS_PATH).exists():
+            return TOFU_KNOWN_HOSTS_PATH, False
+        return None, True
+
+    async def _pin_host_key(self) -> None:
+        """Trust-on-first-use: pin the server host key to the TOFU store."""
+        try:
+            key = self._connection.get_server_host_key()
+            if key is None:
+                logging.warning("[openwrt] Server host key unavailable; TOFU pin skipped")
+                return
+            pub = key.export_public_key().decode().strip()
+            entry = _known_hosts_entry(OPENWRT_HOST, OPENWRT_PORT, pub)
+            store = Path(TOFU_KNOWN_HOSTS_PATH)
+            store.parent.mkdir(parents=True, exist_ok=True)
+            existing = store.read_text(encoding="utf-8") if store.exists() else ""
+            if _host_pattern(OPENWRT_HOST, OPENWRT_PORT) not in existing:
+                with open(store, "a", encoding="utf-8") as f:
+                    f.write(entry + "\n")
+                store.chmod(0o600)
+            logging.warning(
+                "[openwrt] Trust-on-first-use: pinned host key %s for %s:%s in %s",
+                _key_fingerprint(pub),
+                OPENWRT_HOST,
+                OPENWRT_PORT,
+                store,
+            )
+        except OSError as e:
+            logging.warning("[openwrt] TOFU host-key pin failed: %s", e)
 
     async def execute(self, command: str) -> tuple[str, str, int]:
         """Execute a command on the router over SSH."""
@@ -178,17 +260,28 @@ class SSHConnection:
             self._timeout = SSH_TIMEOUT
 
     def _log_audit(self, command: str) -> None:
+        """Append a command to the audit log, rotating at 5 MB.
+
+        Audit failures are logged, never silently swallowed.
+        """
         try:
+            log_path = Path(AUDIT_LOG_FILE)
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                size = log_path.stat().st_size
+            except FileNotFoundError:
+                size = 0
+            if size > _AUDIT_LOG_MAX_BYTES:
+                log_path.replace(log_path.with_suffix(log_path.suffix + ".1"))
+                logging.info("[openwrt] Audit log rotated: %s.1", log_path)
             timestamp = datetime.now().isoformat()
             log_entry = (
                 f"{timestamp} | {get_request_id()} | {OPENWRT_USER}@{OPENWRT_HOST} | {command}\n"
             )
-            log_path = Path(AUDIT_LOG_FILE)
-            log_path.parent.mkdir(parents=True, exist_ok=True)
             with open(log_path, "a", encoding="utf-8") as f:
                 f.write(log_entry)
-        except Exception:
-            pass
+        except OSError as e:
+            logging.warning("[openwrt] Audit log write failed (%s): %s", AUDIT_LOG_FILE, e)
 
     async def close(self) -> None:
         async with self._lock:

@@ -1,5 +1,39 @@
 # Changelog
 
+## [3.5.0] — 2026-09-01
+
+### Feature: local-stdio MCP transport
+- `openwrt-mcp --transport stdio` runs MCP over stdin/stdout. Single-user
+  setups no longer need a long-running daemon or SSE port — the MCP client
+  (opencode, Claude Desktop, …) owns the process lifecycle.
+- `main()` gains an `--transport {stdio,sse}` CLI flag and a `MCP_TRANSPORT`
+  env override. The health (9094) and REST (9096) servers are skipped in
+  stdio mode.
+
+### Security: SSH host-key verification (TOFU)
+- New `OPENWRT_HOST_KEY_POLICY` env (`tofu`|`none`, default `tofu`).
+- On first connect, the server's host key is pinned to
+  `~/.config/openwrt-mcp/known_hosts` (mode `0600`). Subsequent connections
+  are strictly verified; a key change is refused with a clear log line.
+- Set `OPENWRT_KNOWN_HOSTS` to point at an existing known_hosts file for
+  strict mode from the first connect.
+- A clear `HOST KEY VERIFICATION FAILED` log replaces the previous silent
+  error on mismatch.
+
+### Security: hardened audit logging
+- Audit failures (`OSError`) are now logged as a warning, never silently
+  swallowed.
+- Files rotate at 5 MB (`.log` → `.log.1`) on next append.
+
+### Security: validator cleanup
+- Removed unreachable `>` carve-out in `validate_command()`.
+- Added explicit `\n` and `\r` to `DANGEROUS_METACHARACTERS` for clarity.
+
+### Tests
+- New `tests/unit/test_security_hardening.py` — 16 cases covering
+  TOFU policy resolution, audit write/rotation/failure, known_hosts
+  formatting, fingerprint, and the validator hardening.
+
 ## [1.2.1] — 2026-05-21
 
 ### Fixed — Standards Compliance (MCP Server Architect Standard v1.1.0)

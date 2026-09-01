@@ -399,9 +399,33 @@ def run_rest_api() -> None:
 # =============================================================================
 
 
-def main() -> None:
-    """Main entry point for the OpenWRT MCP server."""
+def main(argv: list[str] | None = None) -> None:
+    """Main entry point for the OpenWRT MCP server.
+
+    Transports:
+      --transport stdio   MCP over stdin/stdout (local MCP clients; the client
+                          owns the process lifecycle). Health/REST servers are
+                          not started in this mode.
+      --transport sse     MCP over SSE on MCP_SSE_PORT (default, for LibreChat
+                          and other HTTP clients). Also starts health + REST.
+    """
+    import argparse
+
     from openwrt_mcp.tools.constants import OPENWRT_HOST, OPENWRT_PORT
+
+    parser = argparse.ArgumentParser(prog="openwrt-mcp", description="OpenWRT MCP Server")
+    parser.add_argument(
+        "--transport",
+        choices=["stdio", "sse"],
+        default=os.getenv("MCP_TRANSPORT", "sse"),
+        help="MCP transport (default: sse, or MCP_TRANSPORT env var)",
+    )
+    args = parser.parse_args(argv)
+
+    if args.transport == "stdio":
+        logger.info("Starting MCP stdio transport")
+        mcp.run(transport="stdio")
+        return
 
     # 1. Start health check server (port from HEALTH_PORT)
     start_health_server(port=HEALTH_PORT)

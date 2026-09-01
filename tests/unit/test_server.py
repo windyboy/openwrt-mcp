@@ -128,8 +128,20 @@ class TestServerHelpers:
                     with patch.dict("os.environ", {}, clear=True):
                         mock_mcp.side_effect = SystemExit(0)
                         try:
-                            main()
+                            main([])
                         except SystemExit:
                             pass
             mock_health.assert_called_once()
             mock_rest.assert_called_once()
+
+    def test_main_stdio_skips_http_servers(self):
+        from openwrt_mcp.server import main
+
+        with patch("openwrt_mcp.server.start_health_server") as mock_health:
+            with patch("openwrt_mcp.server.run_rest_api") as mock_rest:
+                with patch("openwrt_mcp.server.mcp.run") as mock_mcp:
+                    with patch.dict("os.environ", {}, clear=True):
+                        main(["--transport", "stdio"])
+            mock_health.assert_not_called()
+            mock_rest.assert_not_called()
+            mock_mcp.assert_called_once_with(transport="stdio")

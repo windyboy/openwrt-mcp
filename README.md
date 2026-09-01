@@ -1,210 +1,143 @@
-# OpenWRT-MCP
+# openwrt-mcp
 
-[![CI](https://github.com/paulomac1000/openwrt-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/paulomac1000/openwrt-mcp/actions/workflows/ci.yml)
-[![Docker](https://github.com/paulomac1000/openwrt-mcp/actions/workflows/publish.yml/badge.svg)](https://github.com/paulomac1000/openwrt-mcp/actions/workflows/publish.yml)
-[![Python 3.14+](https://img.shields.io/badge/python-3.14%2B-blue)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+A read-only-by-default [Model Context Protocol](https://modelcontextprotocol.io/)
+server for OpenWRT routers. Speaks to the router over SSH (key auth) with a
+default-deny command allowlist, so even a prompt-injected agent can only
+request operations that have been explicitly whitelisted.
 
-Read-only MCP (Model Context Protocol) server for OpenWRT router management and diagnostics.
-Enables AI assistants (Claude Desktop, LibreChat, Cline) to observe and analyze an OpenWRT
-router without any write access.
-
-## Requirements
-
-- Python 3.14+ (for local use) or Docker
-- OpenWRT router with SSH enabled (Dropbear or OpenSSH)
-- SSH key pair for authentication
-
-## Quick Start
-
-### 1. Generate SSH Key
-
-```bash
-ssh-keygen -t ed25519 -f openwrt_id_ed25519 -C "openwrt-mcp"
-ssh-copy-id -i openwrt_id_ed25519.pub root@192.168.0.1
+```text
+MCP client ──► openwrt-mcp ──► SSH ──► OpenWRT router
+                (whitelist + audit + host-key pin)
 ```
 
-### 2. Configure
+## Features
+
+- **Default-deny command allowlist** — every SSH command is matched against
+  a strict, anchored regex allowlist before it leaves the box.
+- **24 tools** — system info, WiFi status, DHCP leases, firewall rules,
+  OpenThread (when present), UCI read, log search, package list, ping /
+  traceroute / nslookup, WiFi scan.
+- **Write tools gated by `ENABLE_WRITE_OPERATIONS=1`** — `uci set`, `uci
+  commit`, `ifdown`/`ifup`, `/etc/init.d/network reload|restart`,
+  `ubus call system reboot`. Read-only by default.
+- **SSH host-key verification** with trust-on-first-use by default and a
+  clear refusal on key change.
+- **Audit log** with 5 MB rotation and timestamped request IDs.
+- **Two transports** — local **stdio** (preferred for single-user setups)
+  or SSE on `127.0.0.1:9095` for HTTP-based clients.
+- **Secret redaction** at the response boundary: WiFi PSKs, passwords, and
+  tokens cannot leak even if a tool forgets to sanitise.
+
+## Install (uv)
 
 ```bash
-cp .env.example .env
-# Edit .env with your OPENWRT_HOST and SSH key path
-```
-
-### 3. Run with Docker
-
-**Option A — with docker compose:**
-
-```bash
-# After editing .env, for Docker add MCP_UNSAFE_PUBLIC_ACCESS_CONFIRMED=1 to .env
-docker compose up -d
-```
-
-**Option B — with plain docker run:**
-
-```bash
-docker run -d \
-  --name openwrt-mcp \
-  -p 9094:9094 \
-  -p 9095:9095 \
-  -p 9096:9096 \
-  -e OPENWRT_HOST=192.168.0.1 \
-  -e OPENWRT_SSH_KEY=/app/keys/openwrt_id_ed25519 \
-  -e MCP_UNSAFE_PUBLIC_ACCESS_CONFIRMED=1 \
-  -v $(pwd)/keys:/app/keys:ro \
-  ghcr.io/paulomac1000/openwrt-mcp:latest
-```
-
-**Building locally:**
-
-```bash
-git clone https://github.com/paulomac1000/openwrt-mcp.git
+git clone <repo-url> openwrt-mcp
 cd openwrt-mcp
-docker build -t openwrt-mcp .
-# Then run with the same docker run command above
+uv sync --extra dev
 ```
 
-### 4. Run locally (Python 3.14+)
+## Configure
+
+All configuration is via environment variables. Create a `.env` or export
+them in your shell:
 
 ```bash
-pip install -e ".[dev]"
-OPENWRT_HOST=192.168.0.1 OPENWRT_SSH_KEY=/path/to/key openwrt-mcp
+export OPENWRT_HOST=192.168.1.1
+export OPENWRT_SSH_KEY=$HOME/.ssh/openwrt_mcp_ed25519
+export ENABLE_WRITE_OPERATIONS=false     # true to enable write tools
+export ENABLE_AUDIT_LOGGING=true
+export AUDIT_LOG_FILE=$PWD/audit/openwrt_mcp.log
+export LOG_LEVEL=INFO
 ```
 
-## Ports
+The SSH key must already be authorised on the router
+(`ssh-copy-id -i ~/.ssh/openwrt_mcp_ed25519.pub root@<host>`).
 
-| Port | Protocol | Purpose | Endpoint |
-|------|----------|---------|----------|
-| 9094 | HTTP | Health check | `GET /health` |
-| 9095 | SSE | MCP transport (SSE) | `/sse`, `/messages` |
-| 9096 | HTTP | REST API | `/api/*` |
+## Run
 
-### Verify
+**stdio** — preferred for local MCP clients:
 
 ```bash
-# Health check
-curl http://localhost:9094/health
-
-# List all MCP tools
-curl http://localhost:9096/api/tools
-
-# Call a tool
-curl -X POST http://localhost:9096/api/tools/get_router_info \
-  -H "Content-Type: application/json" \
-  -d '{}'
-
-# Get tool manifest
-curl http://localhost:9096/api/tools/get_router_info/manifest
+uv run openwrt-mcp --transport stdio
 ```
 
-## Available Tools (24)
+**SSE** — for HTTP-based MCP clients (LibreChat, …). Also starts a health
+endpoint on `:9094` and a REST API on `:9096`:
 
-Tools are categorized by risk level: **[READ]** tools are safe — they query the router with no side effects.
-**[WRITE]** tools can modify router state and require `ENABLE_WRITE_OPERATIONS=1` in `.env`.
-**[DESTRUCTIVE]** tools are irreversible (reboot) and require explicit confirmation.
+```bash
+uv run openwrt-mcp --transport sse
+```
 
-| Category | Tool | Risk | Description |
-|----------|------|------|-------------|
-| **Connection** | `test_router_connection` | READ | Verify SSH connectivity |
-| **System** | `get_router_info` | READ | Board info, memory, uptime, release |
-| | `get_router_context` | READ | Unified context snapshot (system, wifi, DHCP, health) |
-| | `describe_router_capabilities` | READ | Server introspection — tools, manifests, collectors |
-| **Network** | `get_router_wifi_status` | READ | WiFi radios, SSIDs, connected clients |
-| | `get_router_dhcp_leases` | READ | Active DHCP leases |
-| | `diagnose_router_connectivity` | READ | Ping, DNS, and gateway tests |
-| | `ping_host` | READ | Ping a specific host |
-| | `traceroute_host` | READ | Traceroute to a host |
-| | `nslookup_host` | READ | DNS lookup from the router |
-| | `wifi_scan` | READ | Scan neighboring WiFi networks |
-| **Security** | `get_router_firewall_rules` | READ | iptables / nftables / fw4 rules |
-| | `read_router_uci_config` | READ | Read UCI configuration sections |
-| **Diagnostics** | `get_router_logs` | READ | Recent system logs |
-| | `search_router_logs` | READ | Filtered log search |
-| **Packages** | `list_router_packages` | READ | Installed OPKG packages |
-| **DHCP** | `get_dhcp_static_leases` | READ | Static DHCP reservations |
-| | `search_dhcp_logs` | READ | Search DHCP events in logs |
-| | `get_device_dhcp_details` | READ | Full device info (lease, reservation, logs) |
-| **Write** | `uci_set` | WRITE | Set a UCI configuration value |
-| | `uci_commit` | WRITE | Commit UCI changes permanently |
-| | `restart_interface` | WRITE | Restart a network interface |
-| | `reload_network` | WRITE | Reload network services |
-| | `reboot_device` | DESTRUCTIVE | Reboot the router (irreversible) |
+Wire it into opencode's `mcp` config:
 
-## Configuration
+```jsonc
+{
+  "mcp": {
+    "openwrt": {
+      "type": "local",
+      "command": ["uv", "run", "--directory", "/path/to/openwrt-mcp",
+                  "openwrt-mcp", "--transport", "stdio"],
+      "environment": {
+        "OPENWRT_HOST": "192.168.1.1",
+        "OPENWRT_SSH_KEY": "/home/you/.ssh/openwrt_mcp_ed25519",
+        "ENABLE_WRITE_OPERATIONS": "false"
+      },
+      "enabled": true
+    }
+  }
+}
+```
 
-All configuration is via environment variables. See `.env.example` for a complete template.
-
-### Required
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `OPENWRT_HOST` | Router IP address | `192.168.0.1` |
-| `OPENWRT_SSH_KEY` | Path to SSH private key | `/app/keys/openwrt_id_ed25519` |
-
-### Optional
+## Configuration reference
 
 | Variable | Default | Description |
-|----------|---------|-------------|
+|---|---|---|
+| `OPENWRT_HOST` | — | Router IP or hostname |
 | `OPENWRT_PORT` | `22` | SSH port |
 | `OPENWRT_USER` | `root` | SSH username |
-| `MCP_SSE_PORT` | `9095` | MCP SSE transport port |
-| `REST_API_PORT` | `9096` | REST API port |
-| `HEALTH_PORT` | `9094` | Health check port |
-| `SSH_TIMEOUT` | `30` | SSH connection timeout (seconds) |
-| `MCP_UNSAFE_PUBLIC_ACCESS_CONFIRMED` | — | Set to `1` for Docker port forwarding |
-| `ENABLE_WRITE_OPERATIONS` | `false` | Set to `1` to enable write tools (uci_set, reboot, and others) |
-| `OPENWRT_PASSWORD` | `None` | SSH password (not recommended — use SSH keys) |
-| `ENABLE_AUDIT_LOGGING` | `true` | Log all executed commands |
+| `OPENWRT_SSH_KEY` | — | Path to SSH private key |
+| `OPENWRT_PASSWORD` | — | SSH password (discouraged — use keys) |
+| `OPENWRT_KNOWN_HOSTS` | — | Path to an OpenSSH known_hosts file (strict mode) |
+| `OPENWRT_HOST_KEY_POLICY` | `tofu` | `tofu` (default) or `none` |
+| `ENABLE_WRITE_OPERATIONS` | `false` | Set to `true` to register write tools |
+| `ENABLE_AUDIT_LOGGING` | `true` | Log every executed command |
 | `AUDIT_LOG_FILE` | `/app/log/openwrt_mcp.log` | Audit log path |
-| `LOG_LEVEL` | `INFO` | Logging level |
-| `OPENWRT_KNOWN_HOSTS` | — | Path to SSH known_hosts file for host key verification |
+| `MCP_TRANSPORT` | `sse` | `sse` or `stdio` (also `--transport` flag) |
+| `MCP_SSE_PORT` | `9095` | SSE port (sse transport only) |
+| `HEALTH_PORT` | `9094` | Health port (sse transport only) |
+| `REST_API_PORT` | `9096` | REST port (sse transport only) |
+| `LOG_LEVEL` | `INFO` | Standard logging level |
 
-## Security Model
+## Security model
 
-- **Read-only by default** — All SSH commands are whitelisted; write operations (`uci set`, `ifdown`, `ubus reboot`) require `ENABLE_WRITE_OPERATIONS=1`
-- **Command whitelist** — Explicit read-only patterns (`ubus call`, `uci show`, `cat /proc/*`, `logread`, `ping`, and others)
-- **Write command whitelist** — Separate `execute_write()` path for write operations (`ifdown`, `ifup`, `uci set/commit`, `/etc/init.d/network`, `ubus reboot`)
-- **Blocked patterns** — `rm`, `reboot`, `wget`, `curl`, `uci set` (in read path), shell metacharacters (`;`, `|`, `&&`, `$`, and others)
-- **Key-based authentication** — Password login discouraged
-- **SSH host key verification** — Optional via `OPENWRT_KNOWN_HOSTS` (set to path of known_hosts file)
-- **Audit logging** — All commands logged with timestamps for accountability
-- **Localhost binding** — All ports bind to `127.0.0.1` by default; set `MCP_UNSAFE_PUBLIC_ACCESS_CONFIRMED=1` for Docker
+See [`docs/SECURITY.md`](docs/SECURITY.md) for the threat model and the
+command allowlist in detail. The short version: **the router is root**, so
+the server is built to refuse anything not explicitly whitelisted, verify
+the router's identity, and leave an audit trail of every command.
 
-## Standards Compliance
+## Architecture
 
-This server follows two AI-First standards:
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the module map,
+transports, and the security layers in execution order.
 
-| Standard | Document | Version | Description |
-|----------|----------|---------|-------------|
-| **AFDS** | [`docs_standards.md`](https://github.com/paulomac1000/ai-skills/blob/main/skills/afds-doc-writer/docs_standards.md) | v1.0 | Documentation structure, frontmatter schema, controlled language |
-| **MCP Core** | [`mcp-server-standards.md`](https://github.com/paulomac1000/ai-skills/blob/main/skills/mcp-server-architect/mcp-server-standards.md) | v1.1.0 | Tool design, response contracts, testing hierarchy, security |
-
-Compliance level: **L3-ready** (all L1-L3 rules met; Risk Consistency Matrix enforced by automated tests).
-
-## Testing
+## Development
 
 ```bash
-pip install -e ".[dev]"
-pytest tests/unit/ tests/integration/ -q       # 268 tests (requires .env for integration)
-pytest tests/unit/ --cov=openwrt_mcp -q         # 80%+ coverage
-ruff check . && ruff format --check .           # lint
-mypy src/openwrt_mcp/ --strict                  # type check
-bandit -r src/openwrt_mcp/ -ll                  # security
+uv sync --extra dev
+uv run pytest tests/unit -q
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy src/openwrt_mcp --strict
 ```
 
-## Quick Reference
+See [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
-| Metric | Value |
-|--------|-------|
-| Python | 3.14+ (Docker: 3.14) |
-| Tools | 24 (19 READ + 4 WRITE + 1 DESTRUCTIVE) |
-| Tests | 296 (215 unit + 53 integration + 10 smoke + 18 e2e) |
-| Coverage | 86% |
-| Lint | 0 errors (ruff + mypy --strict + bandit) |
-| Docker | `ghcr.io/paulomac1000/openwrt-mcp:latest` |
-| Standards | AFDS v1.0 + [MCP Core v1.1.0](https://github.com/paulomac1000/ai-skills) — L2+ |
-| License | MIT |
+## Acknowledgements
+
+Forked from [paulomac1000/openwrt-mcp](https://github.com/paulomac1000/openwrt-mcp),
+which itself was forked from [jsebgiraldo/openwrt_ssh_mcp](https://github.com/jsebgiraldo/openwrt_ssh_mcp).
+Both upstream projects are MIT-licensed.
 
 ## License
 
-MIT
+MIT — see [`LICENSE`](LICENSE).

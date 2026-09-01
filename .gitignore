@@ -1,64 +1,36 @@
-# Environment
-.env
-.env.local
-.env.*.local
-
-# Python
+# Python / uv
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
-.Python
+
+# uv
+.venv/
+uv.lock.local
+
+# Build artifacts
 build/
-develop-eggs/
 dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
 *.egg
 
-# Virtual environments
-venv/
-ENV/
-env/
-.venv/
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-
-# Testing
+# Test / lint caches
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .coverage
 htmlcov/
 .tox/
-.nox/
 
-# Logs
-*.log
+# Runtime artifacts
+audit/
 logs/
+*.log
 
-# Docker
-.docker/
+# Per-user secrets (TOFU host-key store lives in ~/.config/openwrt-mcp/)
+known_hosts
 
-# SSH Keys (never commit!)
-keys/
-*.pem
-*.key
-id_rsa
-id_ed25519
-
-# OS
+# Editor / OS
+.idea/
+.vscode/
 .DS_Store
-Thumbs.db
