@@ -7,6 +7,8 @@
   `uci set` values are allowlisted (`[A-Za-z0-9_.,:/@-]+`) before SSH.
 
 ### Docs
+- CHANGELOG 4.0.0 and SECURITY: `starlette`/`uvicorn` remain
+  transitive via FastMCP/`mcp`; not a slim-install option for servers.
 - Install via `uv tool install` (frozen binary). Router env and audit
   under XDG (`~/.config/openwrt-mcp/env`, `~/.local/state/openwrt-mcp/`).
   MCP clients should exec `~/.config/openwrt-mcp/run`, not `uv run` in
@@ -24,7 +26,12 @@
   stdio only. `main()` takes no `--transport` flag and binds no ports.
 - **Environment variables removed:** `MCP_TRANSPORT`, `MCP_SSE_PORT`,
   `HEALTH_PORT`, `REST_API_PORT`, `MCP_UNSAFE_PUBLIC_ACCESS_CONFIRMED`.
-- **Dependencies dropped:** `starlette` and `uvicorn`.
+- **Direct dependencies dropped:** `starlette` and `uvicorn` are no
+  longer listed in `pyproject.toml`. `fastmcp` still pulls them in
+  transitively (`fastmcp` → `fastmcp-slim[server]` → `mcp` →
+  `sse-starlette` / `starlette` / `uvicorn`). `openwrt-mcp` itself
+  imports neither and binds no ports. There is no FastMCP extra that
+  runs a stdio server without those packages.
 - **Docker packaging deleted:** `Dockerfile` and `docker-compose.yml` are
   gone from the repo. The GHCR publish workflow is gone with them.
 
