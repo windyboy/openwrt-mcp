@@ -153,16 +153,30 @@ class SecurityValidator:
             f"UCI configuration (read-only), package lists, network diagnostics"
         )
 
+    # UCI option values interpolated into `uci set k=v`. Keep this tighter
+    # than `[^\s]+` so `$()`, backticks, `;`, quotes, and spaces never
+    # reach the remote shell.
+    UCI_VALUE_PATTERN = r"[A-Za-z0-9_.,:/@-]+"
+    UCI_VALUE_RE = re.compile(rf"^{UCI_VALUE_PATTERN}$")
+
     # ALLOWED WRITE-ONLY COMMANDS (guarded by ENABLE_WRITE_OPERATIONS=1)
     ALLOWED_WRITE_PATTERNS = [
         r"^ifdown [a-z][a-z0-9._-]{0,14}$",
         r"^ifup [a-z][a-z0-9._-]{0,14}$",
         r"^/etc/init\.d/network (?:reload|restart)$",
-        r"^uci set [a-zA-Z0-9._-]+\.@?[a-zA-Z0-9._-]+\[\d+\]\.[a-zA-Z0-9._-]+=[^\s]+$",
-        r"^uci set [a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+=[^\s]+$",
+        rf"^uci set [a-zA-Z0-9._-]+\.@?[a-zA-Z0-9._-]+\[\d+\]"
+        rf"\.[a-zA-Z0-9._-]+={UCI_VALUE_PATTERN}$",
+        rf"^uci set [a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+={UCI_VALUE_PATTERN}$",
         r"^uci commit [a-zA-Z0-9._-]+$",
         r"^ubus call system reboot$",
     ]
+
+    @classmethod
+    def validate_uci_value(cls, value: str) -> tuple[bool, str]:
+        """Return whether a UCI option value is safe to interpolate."""
+        if not value or not isinstance(value, str) or not cls.UCI_VALUE_RE.fullmatch(value):
+            return False, "UCI value contains disallowed characters"
+        return True, "ok"
 
     @classmethod
     def validate_write_command(cls, command: str) -> tuple[bool, str]:
@@ -170,11 +184,16 @@ class SecurityValidator:
 
         Only active when ENABLE_WRITE_OPERATIONS=1.
         Uses its own allowlist of safe write operations.
+        Applies the same metacharacter blocklist as the read path first.
         """
         if not command or not isinstance(command, str):
             return False, "Empty or invalid command"
 
         cmd_stripped = command.strip()
+
+        for char in cls.DANGEROUS_METACHARACTERS:
+            if char in cmd_stripped:
+                return False, f"Blocked dangerous character: '{char}'"
 
         for pattern in cls.ALLOWED_WRITE_PATTERNS:
             if re.fullmatch(pattern, cmd_stripped):

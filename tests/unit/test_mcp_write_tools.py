@@ -413,6 +413,14 @@ class TestOpenWRTWriterInternal:
         assert result["success"] is False
 
     @pytest.mark.asyncio
+    async def test_uci_set_rejects_injection_before_ssh(self):
+        """uci_set must not send metacharacter values to SSH."""
+        writer = await self._setup_writer()
+        result = await writer.uci_set("network", "lan", "ipaddr", "$(reboot)")
+        assert result["success"] is False
+        writer.ssh.execute_write.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_uci_commit_success(self):
         """uci_commit should return success."""
         writer = await self._setup_writer()

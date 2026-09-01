@@ -63,8 +63,9 @@ Two allowlists, both anchored with `re.fullmatch`:
   interface name is validated separately (lowercase, max 15 chars, `lo`
   blocked).
 
-Metacharacters rejected before the allowlist: `;`, `&&`, `||`, `|`, `$(`,
-backticks, `$`, `{`, `}`, `\n`, `\r`.
+Metacharacters rejected before both allowlists: `;`, `&&`, `||`, `|`, `$(`,
+backticks, `$`, `{`, `}`, `\n`, `\r`. `uci set` values are further limited
+to `[A-Za-z0-9_.,:/@-]+` so they are not interpolated raw.
 
 ## Audit log
 

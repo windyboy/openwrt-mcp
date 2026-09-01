@@ -68,6 +68,9 @@ class OpenWRTWriter:
 
     async def uci_set(self, config: str, section: str, option: str, value: str) -> dict[str, Any]:
         """Set a UCI configuration value."""
+        ok, msg = SecurityValidator.validate_uci_value(value)
+        if not ok:
+            return {"success": False, "error": msg}
         uci_path = f"{config}.{section}.{option}"
         cmd = f"uci set {uci_path}={value}"
 

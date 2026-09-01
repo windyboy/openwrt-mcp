@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Security
+- Write-path commands now hit the same metacharacter blocklist as reads.
+  `uci set` values are allowlisted (`[A-Za-z0-9_.,:/@-]+`) before SSH.
+
 ### Docs
 - Install via `uv tool install` (frozen binary). Router env and audit
   under XDG (`~/.config/openwrt-mcp/env`, `~/.local/state/openwrt-mcp/`).
