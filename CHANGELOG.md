@@ -7,12 +7,11 @@
   `uci set` values are allowlisted (`[A-Za-z0-9_.,:/@-]+`) before SSH.
 
 ### Docs
-- CHANGELOG 4.0.0 and SECURITY: `starlette`/`uvicorn` remain
-  transitive via FastMCP/`mcp`; not a slim-install option for servers.
-- Install via `uv tool install` (frozen binary). Router env and audit
-  under XDG (`~/.config/openwrt-mcp/env`, `~/.local/state/openwrt-mcp/`).
-  MCP clients should exec `~/.config/openwrt-mcp/run`, not `uv run` in
-  the git working tree.
+- Align README, CONTRIBUTING, ARCHITECTURE, SECURITY, openwrt-mcp
+  reference, glossary, and doc-registry: stdio-only, XDG install,
+  write-path metachar + UCI value allowlist, FastMCP transitive
+  `starlette`/`uvicorn`. CONTRIBUTING no longer mentions a
+  non-existent `OPENWRT_INTEGRATION` flag.
 
 ### Changed
 - Default `AUDIT_LOG_FILE` is `~/.local/state/openwrt-mcp/audit.log`.

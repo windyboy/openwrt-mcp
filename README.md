@@ -19,7 +19,9 @@ MCP client ──► openwrt-mcp ──► SSH ──► OpenWRT router
   traceroute / nslookup, WiFi scan.
 - **Write tools gated by `ENABLE_WRITE_OPERATIONS=1`** — `uci set`, `uci
   commit`, `ifdown`/`ifup`, `/etc/init.d/network reload|restart`,
-  `ubus call system reboot`. Read-only by default.
+  `ubus call system reboot`. Read-only by default. The write path uses
+  the same metacharacter blocklist as reads; `uci set` values are
+  limited to `[A-Za-z0-9_.,:/@-]+`.
 - **SSH host-key verification** with trust-on-first-use by default and a
   clear refusal on key change.
 - **Audit log** with 5 MB rotation and timestamped request IDs.
@@ -157,6 +159,9 @@ See [`docs/SECURITY.md`](docs/SECURITY.md) for the threat model and the
 command allowlist in detail. The short version: **the router is root**, so
 the server is built to refuse anything not explicitly whitelisted, verify
 the router's identity, and leave an audit trail of every command.
+
+`starlette` / `uvicorn` may still appear in the venv via FastMCP → `mcp`;
+this process never binds TCP. See SECURITY “Known limitations”.
 
 ## Architecture
 

@@ -9,7 +9,7 @@ stability: stable
 ai_scope: editable
 source_of_truth: true
 upstream: []
-last_verified: 2026-05-13
+last_verified: 2026-09-01
 owners: ["backend-team"]
 ---
 
@@ -17,8 +17,13 @@ owners: ["backend-team"]
 
 - `MCP`: Model Context Protocol — protocol for communication between
   AI agents and tools/servers
-- `SSE`: Server-Sent Events — MCP transport over long-lived HTTP
-  connection
+- `stdio`: The only transport this server speaks (stdin/stdout JSON-RPC).
+  The MCP client owns the process lifecycle.
+- `SSE`: Server-Sent Events — HTTP MCP transport used in 3.x; **removed
+  in 4.0.0**. Not a current operator path.
+- `XDG env`: Operator config at `~/.config/openwrt-mcp/env`; audit at
+  `~/.local/state/openwrt-mcp/audit.log`; TOFU pins at
+  `~/.config/openwrt-mcp/known_hosts`
 - `OpenWRT`: Linux distribution for routers based on Buildroot
 - `UCI`: Unified Configuration Interface — configuration framework
   on OpenWRT
@@ -29,8 +34,10 @@ owners: ["backend-team"]
 - `SSH`: Secure Shell — encrypted remote access protocol
 - `FastMCP`: Python framework for building MCP servers
 - `asyncssh`: Asynchronous SSH library for Python
-- `SecurityValidator`: Whitelist-based command filter preventing
-  SSH command injection
+- `TOFU`: Trust-on-first-use SSH host-key pinning (default policy)
+- `SecurityValidator`: Allowlist + metacharacter filter for SSH commands
+  (read and write paths)
+- `UCI value allowlist`: `[A-Za-z0-9_.,:/@-]+` charset for `uci set` values
 - `ValidationError`: Exception class for input validation failures
 - `ruff`: Python linter and formatter used in CI
 - `mypy`: Static type checker used in CI
