@@ -21,7 +21,7 @@ MCP client ──► openwrt-mcp ──► SSH ──► OpenWRT router
   commit`, `ifdown`/`ifup`, `/etc/init.d/network reload|restart`,
   `ubus call system reboot`. Read-only by default. The write path uses
   the same metacharacter blocklist as reads; `uci set` values must match
-  the regex `` `[A-Za-z0-9_.,:/@-]+` ``.
+  the regex `[A-Za-z0-9_.,:/@-]+`.
 - **SSH host-key verification** with trust-on-first-use by default and a
   clear refusal on key change.
 - **Audit log** with 5 MB rotation and timestamped request IDs.
