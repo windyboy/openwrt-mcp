@@ -8,10 +8,11 @@
 
 ### Docs
 - Align README, CONTRIBUTING, ARCHITECTURE, SECURITY, openwrt-mcp
-  reference, glossary, and doc-registry: stdio-only, XDG install,
-  write-path metachar + UCI value allowlist, FastMCP transitive
-  `starlette`/`uvicorn`. CONTRIBUTING no longer mentions a
-  non-existent `OPENWRT_INTEGRATION` flag.
+  reference, glossary, doc-registry, AFDS template, `afds_config.yaml`,
+  and `.github/ci-cd-config.yaml`: stdio-only, XDG install, write-path
+  metachar + UCI value allowlist, FastMCP transitive `starlette`/`uvicorn`.
+  CONTRIBUTING no longer mentions a non-existent `OPENWRT_INTEGRATION`
+  flag. CI contract records no Docker/GHCR and CAFDS validator off.
 
 ### Changed
 - Default `AUDIT_LOG_FILE` is `~/.local/state/openwrt-mcp/audit.log`.

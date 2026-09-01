@@ -27,4 +27,7 @@ owners: ["backend-team"]
 | ref.glossary | docs/meta/glossary.md | ref | active | Central glossary |
 | ref.doc-registry | docs/meta/doc-registry.md | ref | active | This file |
 | ref.doc-template | docs/templates/doc-template.md | ref | active | Document creation template |
+| ref.env-example | .env.example | ref | active | XDG env template |
+| ref.afds-config | afds_config.yaml | ref | active | AFDS validator paths/exemptions |
+| ref.cicd-config | .github/ci-cd-config.yaml | ref | active | CI/CD contract (no Docker/CAFDS) |
 | ref.documentation-standard | (upstream) | ref | active | AFDS standard (external) |

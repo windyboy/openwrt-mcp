@@ -2,6 +2,10 @@
 #
 # This file is the Single Source of Truth for all CI/CD parameters.
 # Workflow files are generated from this config using the ci-cd-architect skill.
+#
+# Product facts (4.0.0): MCP over stdio only; no HTTP sidecars; no Docker
+# or GHCR publish workflow. `use_docs_validation` stays false — the CAFDS
+# HTTP validator 404s (W1N-273).
 
 language: "python"
 src_dir: "src/openwrt_mcp/"
