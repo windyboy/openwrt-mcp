@@ -10,7 +10,7 @@ ai_scope: editable
 source_of_truth: true
 upstream:
   - ref.documentation-standard
-last_verified: 2026-05-13
+last_verified: 2026-09-01
 owners: ["backend-team"]
 ---
 

@@ -24,8 +24,13 @@ vars the server uses (`OPENWRT_HOST`, `OPENWRT_SSH_KEY`, ...).
 
 ## Running locally
 
+For a live MCP client, install a frozen binary (`uv tool install .`) and
+follow the XDG + wrapper steps in [`README.md`](README.md#install). Do
+not point opencode at `uv run` inside this working tree.
+
+To smoke-test stdio from a clone during development:
+
 ```bash
-# stdio — the MCP client owns the process
 uv run openwrt-mcp
 ```
 

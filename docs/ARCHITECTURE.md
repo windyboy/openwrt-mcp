@@ -47,7 +47,8 @@ One process, one transport, one boundary (stdout). There is no HTTP sidecar.
 ## Transport
 
 **stdio only.** MCP over stdin/stdout. The client (opencode, Claude Desktop, …)
-owns the process lifecycle. `uv run openwrt-mcp` binds no ports.
+owns the process lifecycle. The installed `openwrt-mcp` binary (or
+`~/.config/openwrt-mcp/run`) binds no ports.
 
 SSE / Health / REST sidecars were removed in 4.0.0. HTTP-based MCP clients
 should sit behind a stdio→HTTP bridge rather than this process.

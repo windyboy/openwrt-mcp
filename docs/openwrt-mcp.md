@@ -84,6 +84,22 @@ Key design decisions:
 stdio only. The MCP client spawns `openwrt-mcp` and speaks JSON-RPC on
 stdin/stdout. The process binds no TCP ports.
 
+### Install (operator)
+
+Install a frozen binary; do not bind the MCP client to `uv run` in a
+git working tree. See `README.md`.
+
+```bash
+uv tool install git+https://github.com/windyboy/openwrt-mcp.git
+# or from a clone: uv tool install .
+```
+
+Router env: `~/.config/openwrt-mcp/env` (mode `600`). Audit:
+`~/.local/state/openwrt-mcp/audit.log`. Optional wrapper
+`~/.config/openwrt-mcp/run` sources the env file and execs
+`~/.local/bin/openwrt-mcp`. Reinstall after source changes:
+`uv tool install --force .`
+
 ### MCP Tools
 
 All 24 tools are exposed as MCP-tool functions via stdio transport.
@@ -191,7 +207,7 @@ Required:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | OPENWRT_HOST | — (required) | Router IP address |
-| OPENWRT_SSH_KEY | /app/keys/openwrt_id_ed25519 | Path to SSH private key |
+| OPENWRT_SSH_KEY | ~/.ssh/openwrt_mcp_ed25519 | Path to SSH private key |
 
 Optional:
 | Variable | Default | Description |
@@ -202,7 +218,7 @@ Optional:
 | SSH_TIMEOUT | 30 | SSH connection timeout (seconds) |
 | LOG_LEVEL | INFO | Logging level |
 | ENABLE_AUDIT_LOGGING | true | Log all executed commands |
-| AUDIT_LOG_FILE | /var/log/openwrt_mcp.log | Audit log file path |
+| AUDIT_LOG_FILE | ~/.local/state/openwrt-mcp/audit.log | Audit log file path |
 | ENABLE_WRITE_OPERATIONS | false | Set to `1` or `true` to enable write tools (uci_set, uci_commit, restart_interface, reload_network, reboot_device) |
 
 ### Assumptions
@@ -299,7 +315,8 @@ execution, to avoid any risk of production router instability.
 ### Run (stdio)
 
 ```bash
-uv run openwrt-mcp
+~/.config/openwrt-mcp/run
+# development clone only: uv run openwrt-mcp
 ```
 
 The MCP client owns the process and speaks JSON-RPC on stdin/stdout.

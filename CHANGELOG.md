@@ -1,5 +1,18 @@
 # Changelog
 
+## [Unreleased]
+
+### Docs
+- Install via `uv tool install` (frozen binary). Router env and audit
+  under XDG (`~/.config/openwrt-mcp/env`, `~/.local/state/openwrt-mcp/`).
+  MCP clients should exec `~/.config/openwrt-mcp/run`, not `uv run` in
+  the git working tree.
+
+### Changed
+- Default `AUDIT_LOG_FILE` is `~/.local/state/openwrt-mcp/audit.log`.
+- Default `OPENWRT_SSH_KEY` is `~/.ssh/openwrt_mcp_ed25519`.
+  Docker-era `/app/log` and `/app/keys` defaults are gone.
+
 ## [4.0.0] — 2026-09-01
 
 ### Breaking
@@ -14,9 +27,9 @@
 ### Migration
 - SSE / HTTP MCP clients should sit behind a stdio→HTTP bridge; this
   process no longer serves an HTTP MCP endpoint.
-- Docker / compose users should drop those files and run
-  `uv run openwrt-mcp` directly, with the SSH key directory available to
-  the process (no port publishes).
+- Docker / compose users should drop those files and
+  `uv tool install` the package, then run `openwrt-mcp` (or
+  `~/.config/openwrt-mcp/run`) with SSH key and env on the host.
 - systemd units that `ExecStart=` the old SSE daemon should be stopped
   and disabled; the MCP client should spawn the process on demand.
 

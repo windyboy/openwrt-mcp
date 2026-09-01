@@ -36,7 +36,10 @@ if _HOST in ("192.168.1.1", "YOUR_ROUTER_IP", "CHANGEME"):
         allow_module_level=True,
     )
 
-_ssh_key_path = os.getenv("OPENWRT_SSH_KEY", "/app/keys/openwrt_id_ed25519")
+_ssh_key_path = os.getenv(
+    "OPENWRT_SSH_KEY",
+    os.path.expanduser("~/.ssh/openwrt_mcp_ed25519"),
+)
 if not Path(_ssh_key_path).exists():
     pytest.skip(
         f"Real router tests require SSH key at {_ssh_key_path}",

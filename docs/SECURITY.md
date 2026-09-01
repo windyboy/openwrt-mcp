@@ -68,7 +68,8 @@ backticks, `$`, `{`, `}`, `\n`, `\r`.
 
 ## Audit log
 
-`AUDIT_LOG_FILE` is appended with one line per executed command:
+Set `AUDIT_LOG_FILE` to `~/.local/state/openwrt-mcp/audit.log` (outside
+the git tree). The file is appended with one line per executed command:
 
 ```
 2026-09-01T17:15:42 | <request-uuid> | root@<router> | <command>

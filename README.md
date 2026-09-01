@@ -28,58 +28,112 @@ MCP client ──► openwrt-mcp ──► SSH ──► OpenWRT router
 - **Secret redaction** at the response boundary: WiFi PSKs, passwords, and
   tokens cannot leak even if a tool forgets to sanitise.
 
-## Install (uv)
+## Install
+
+Install a **frozen** binary with [`uv`](https://docs.astral.sh/uv/). Do not
+point an MCP client at `uv run` inside a git working tree — that couples the
+agent to half-written source.
+
+From a clone (or any local checkout of a tag you trust):
 
 ```bash
-git clone <repo-url> openwrt-mcp
+git clone https://github.com/windyboy/openwrt-mcp.git
 cd openwrt-mcp
-uv sync --extra dev
+uv tool install .
 ```
+
+Or from git without cloning:
+
+```bash
+uv tool install git+https://github.com/windyboy/openwrt-mcp.git
+```
+
+That puts `openwrt-mcp` on `PATH` (`~/.local/bin/openwrt-mcp` by default).
+After you change the package, reinstall:
+
+```bash
+uv tool install --force .
+# or: uv tool install --force git+https://github.com/windyboy/openwrt-mcp.git
+```
+
+Development (tests, lint) is a separate tree: `uv sync --extra dev` in the
+clone. See [Development](#development).
 
 ## Configure
 
-All configuration is via environment variables. Create a `.env` or export
-them in your shell:
+Router credentials and audit live under XDG, not in the MCP client config
+and not in the git tree.
+
+1. Authorise an SSH key on the router:
+
+   ```bash
+   ssh-copy-id -i ~/.ssh/openwrt_mcp_ed25519.pub root@192.168.1.1
+   ```
+
+2. Write env (mode `600`). Copy [`.env.example`](.env.example) or:
 
 ```bash
-export OPENWRT_HOST=192.168.1.1
-export OPENWRT_SSH_KEY=$HOME/.ssh/openwrt_mcp_ed25519
-export ENABLE_WRITE_OPERATIONS=false     # true to enable write tools
-export ENABLE_AUDIT_LOGGING=true
-export AUDIT_LOG_FILE=$PWD/audit/openwrt_mcp.log
-export LOG_LEVEL=INFO
+mkdir -p ~/.config/openwrt-mcp ~/.local/state/openwrt-mcp
+cat > ~/.config/openwrt-mcp/env << 'EOF'
+OPENWRT_HOST=192.168.1.1
+OPENWRT_PORT=22
+OPENWRT_USER=root
+OPENWRT_SSH_KEY=/home/you/.ssh/openwrt_mcp_ed25519
+ENABLE_WRITE_OPERATIONS=false
+ENABLE_AUDIT_LOGGING=true
+AUDIT_LOG_FILE=/home/you/.local/state/openwrt-mcp/audit.log
+LOG_LEVEL=INFO
+EOF
+chmod 600 ~/.config/openwrt-mcp/env
 ```
 
-The SSH key must already be authorised on the router
-(`ssh-copy-id -i ~/.ssh/openwrt_mcp_ed25519.pub root@<host>`).
+3. Optional wrapper so the MCP client only execs one path (sources the env
+   file, then the installed binary):
+
+```bash
+cat > ~/.config/openwrt-mcp/run << 'EOF'
+#!/bin/sh
+set -eu
+ENV_FILE="${OPENWRT_MCP_ENV:-$HOME/.config/openwrt-mcp/env}"
+if [ -f "$ENV_FILE" ]; then
+  set -a
+  . "$ENV_FILE"
+  set +a
+fi
+exec "${OPENWRT_MCP_BIN:-$HOME/.local/bin/openwrt-mcp}"
+EOF
+chmod 755 ~/.config/openwrt-mcp/run
+```
+
+Host keys default to trust-on-first-use at `~/.config/openwrt-mcp/known_hosts`.
 
 ## Run
 
-stdio only — the MCP client (opencode, Claude Desktop, …) owns the process:
+stdio only — the MCP client owns the process. Smoke-test:
 
 ```bash
-uv run openwrt-mcp
+~/.config/openwrt-mcp/run
+# or, with the same env already exported: openwrt-mcp
 ```
 
-Wire it into opencode's `mcp` config:
+`main()` takes no flags (`--transport` is gone).
+
+### opencode
 
 ```jsonc
 {
   "mcp": {
     "openwrt": {
       "type": "local",
-      "command": ["uv", "run", "--directory", "/path/to/openwrt-mcp",
-                  "openwrt-mcp"],
-      "environment": {
-        "OPENWRT_HOST": "192.168.1.1",
-        "OPENWRT_SSH_KEY": "/home/you/.ssh/openwrt_mcp_ed25519",
-        "ENABLE_WRITE_OPERATIONS": "false"
-      },
+      "command": ["/home/you/.config/openwrt-mcp/run"],
       "enabled": true
     }
   }
 }
 ```
+
+Do not put router env in `opencode.json`. Reload MCP (or restart the
+client) after install or reinstall; a running child keeps the old binary.
 
 ## Configuration reference
 
@@ -88,13 +142,13 @@ Wire it into opencode's `mcp` config:
 | `OPENWRT_HOST` | — | Router IP or hostname |
 | `OPENWRT_PORT` | `22` | SSH port |
 | `OPENWRT_USER` | `root` | SSH username |
-| `OPENWRT_SSH_KEY` | — | Path to SSH private key |
+| `OPENWRT_SSH_KEY` | `~/.ssh/openwrt_mcp_ed25519` | Path to SSH private key |
 | `OPENWRT_PASSWORD` | — | SSH password (discouraged — use keys) |
 | `OPENWRT_KNOWN_HOSTS` | — | Path to an OpenSSH known_hosts file (strict mode) |
 | `OPENWRT_HOST_KEY_POLICY` | `tofu` | `tofu` (default) or `none` |
 | `ENABLE_WRITE_OPERATIONS` | `false` | Set to `true` to register write tools |
 | `ENABLE_AUDIT_LOGGING` | `true` | Log every executed command |
-| `AUDIT_LOG_FILE` | `/app/log/openwrt_mcp.log` | Audit log path |
+| `AUDIT_LOG_FILE` | `~/.local/state/openwrt-mcp/audit.log` | Audit log path |
 | `LOG_LEVEL` | `INFO` | Standard logging level |
 
 ## Security model
