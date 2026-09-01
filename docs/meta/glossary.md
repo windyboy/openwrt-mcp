@@ -32,8 +32,6 @@ owners: ["backend-team"]
 - `SecurityValidator`: Whitelist-based command filter preventing
   SSH command injection
 - `ValidationError`: Exception class for input validation failures
-- `REST API`: HTTP-based API on port 9096 exposing MCP tools
-- `Docker`: Container runtime for deploying the MCP server
 - `ruff`: Python linter and formatter used in CI
 - `mypy`: Static type checker used in CI
 - `bandit`: Security linter used in CI

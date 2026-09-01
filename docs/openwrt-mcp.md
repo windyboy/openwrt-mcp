@@ -1,5 +1,5 @@
 ---
-description: Complete reference for OpenWRT-MCP server covering architecture, configuration, MCP tools, REST API, security design, testing, and deployment
+description: Complete reference for OpenWRT-MCP server covering architecture, configuration, MCP tools, security design, testing, and stdio transport
 doc_id: ref.openwrt-mcp
 type: ref
 status: active
@@ -12,7 +12,7 @@ tags: ["openwrt", "mcp", "router", "ssh", "read-only"]
 upstream:
   - ref.documentation-standard
 source_of_truth: true
-last_verified: 2026-05-12
+last_verified: 2026-09-01
 owners: ["backend-team"]
 ---
 
@@ -34,9 +34,9 @@ Key design decisions:
 
 ## SCOPE
 
-- INCLUDED: MCP server architecture, port assignments, 24 MCP tool
-  catalog, REST API endpoints, SSH security whitelist, configuration
-  environment variables, test suite structure, Docker deployment,
+- INCLUDED: MCP server architecture, 24 MCP tool
+  catalog, SSH security whitelist, configuration
+  environment variables, test suite structure,
   build system, CI pipeline
 - EXCLUDED: MCP protocol specification, client-side tool calling,
   CI infrastructure configuration, OpenWRT router firmware
@@ -44,20 +44,18 @@ Key design decisions:
 
 ## DEFINITIONS
 
-- `MCP Server`: A FastMCP-based process exposing read-only OpenWRT
-  tools over SSE transport
+- `MCP Server`: A FastMCP-based process exposing OpenWRT tools over
+  stdio MCP transport
 - `OpenWRT Router`: Target device running OpenWRT with SSH enabled
 - `SecurityValidator`: Whitelist-based command filter preventing
   command injection
-- `REST API`: HTTP endpoints on port 9096 for health checks, tool
-  listing, and tool invocation
 - `SSH Connection`: asyncssh-based connection manager with
   auto-reconnect, timeout handling, and audit logging
 - `UCI`: Unified Configuration Interface — system configuration
   framework on OpenWRT
 - `ubus`: OpenWRT micro bus IPC for service communication
 - `FastMCP`: Python framework for building MCP servers
-- `SSE`: Server-Sent Events — transport protocol for MCP
+- `stdio`: MCP transport over stdin/stdout; the client owns the process
 
 ## RULES
 
@@ -77,36 +75,18 @@ Key design decisions:
 9. System MUST return `_meta` envelope with `request_id`, `duration_ms`,
    and `tool_version` for observed tools
 10. System MUST log only to stderr — stdout corrupts MCP transport
-11. System MUST default to 127.0.0.1 binding for all ports
-12. System MUST require `MCP_UNSAFE_PUBLIC_ACCESS_CONFIRMED=1` to
-    bind to 0.0.0.0 on public access
+11. System MUST speak MCP over stdio only (no HTTP sidecars)
 
 ## INTERFACES
 
-### Ports
+### Transport
 
-| Port | Protocol | Purpose | Endpoints |
-|------|----------|---------|-----------|
-| 9094 | HTTP | Health check | `GET /health` |
-| 9095 | SSE | MCP transport | `/sse`, `/messages` |
-| 9096 | HTTP | REST API wrapper | `/api/*` |
-
-### Health Endpoint
-
-- INPUT: None
-- OUTPUT: JSON with status, tools_registered, tool_invocations,
-  version, endpoints map
-
-### REST API
-
-- `GET /api/health` — system health and metrics
-- `GET /api/tools` — list all registered tools with descriptions
-- `POST /api/tools/{tool_name}` — invoke a tool by name
-- `GET /api/tools/{tool_name}/manifest` — tool capability manifest
+stdio only. The MCP client spawns `openwrt-mcp` and speaks JSON-RPC on
+stdin/stdout. The process binds no TCP ports.
 
 ### MCP Tools
 
-All 24 tools are exposed as MCP-tool functions via SSE transport.
+All 24 tools are exposed as MCP-tool functions via stdio transport.
 Each tool is registered with FastMCP and wrapped in try/except.
 Most I/O tools accept an optional `timeout_seconds` parameter (default: SSH_TIMEOUT).
 
@@ -186,7 +166,7 @@ never `asyncio.run()` inside an existing event loop context.
 
 ```
 src/openwrt_mcp/
-  server.py               # Entry point, REST API, health endpoint
+  server.py               # Entry point, stdio MCP transport
   validators.py           # SecurityValidator, ValidationError
   observability.py        # request_id, _meta envelope, per-tool counters
   tools/
@@ -201,8 +181,8 @@ src/openwrt_mcp/
 tests/
   unit/                   # 200 unit tests (all mocked, no I/O)
   integration/            # 53 integration tests (in-process MCP + real router)
-  smoke/                  # 8 smoke tests (REST API health checks)
-  e2e/                    # 18 E2E tests (full pipeline)
+  smoke/                  # response-contract smoke tests
+  e2e/                    # end-to-end tests (in-process MCP)
 ```
 
 ### Environment Variables
@@ -220,21 +200,17 @@ Optional:
 | OPENWRT_USER | root | SSH username |
 | OPENWRT_PASSWORD | None | Password (not recommended) |
 | SSH_TIMEOUT | 30 | SSH connection timeout (seconds) |
-| MCP_SSE_PORT | 9095 | MCP SSE transport port |
-| REST_API_PORT | 9096 | REST API port |
 | LOG_LEVEL | INFO | Logging level |
 | ENABLE_AUDIT_LOGGING | true | Log all executed commands |
 | AUDIT_LOG_FILE | /var/log/openwrt_mcp.log | Audit log file path |
 | ENABLE_WRITE_OPERATIONS | false | Set to `1` or `true` to enable write tools (uci_set, uci_commit, restart_interface, reload_network, reboot_device) |
-| MCP_UNSAFE_PUBLIC_ACCESS_CONFIRMED | (unset) | Set to `1` to bind to `0.0.0.0` (required for Docker) |
 
 ### Assumptions
 
 - Target router runs OpenWRT with Dropbear or OpenSSH enabled
 - SSH key-based authentication is configured on the router
-- Server runs as a single Python process with daemon threads for
-  health and REST API
-- Python 3.13 or newer is available (3.14-slim base Docker image)
+- Server runs as a single Python process over stdio
+- Python 3.14 or newer is available
 
 ### Constraints
 
@@ -310,62 +286,31 @@ execution, to avoid any risk of production router instability.
 - CASE: Invalid MAC or IP format in get_device_dhcp_details
   EXPECTED: Returns `INVALID_PARAM` error with format suggestion.
 - CASE: Client disconnects during long-running tool (diagnose)
-  EXPECTED: SSE transport detects disconnect. Tool continues in
-  background; result is discarded.
+  EXPECTED: stdio EOF ends the process. In-flight SSH work is abandoned.
 - CASE: All backend connections fail at startup
   EXPECTED: Server starts, tools return connection errors.
 - CASE: Banned search term passed to search_router_logs
   EXPECTED: Returns `INVALID_PARAM` error before any SSH call.
-- CASE: MCP_UNSAFE_PUBLIC_ACCESS_CONFIRMED is not set
-  EXPECTED: Server binds to 127.0.0.1 (localhost only).
+- CASE: MCP client closes stdin
+  EXPECTED: Server exits; no leftover TCP listeners.
 
 ## EXAMPLES
 
-### Health Check
+### Run (stdio)
 
 ```bash
-curl http://localhost:9094/health
+uv run openwrt-mcp
 ```
 
-Response:
-```json
-{"status": "healthy", "tools_registered": 24, "version": "1.2.0"}
-```
+The MCP client owns the process and speaks JSON-RPC on stdin/stdout.
+The process binds no TCP ports.
 
-### List Tools
-
-```bash
-curl http://localhost:9096/api/tools
-```
-
-### Call a Tool via REST API
-
-```bash
-curl -X POST http://localhost:9096/api/tools/get_router_info \
-  -H "Content-Type: application/json" \
-  -d '{}'
-```
-
-### Call a Tool with Parameters
-
-```bash
-curl -X POST http://localhost:9096/api/tools/read_router_uci_config \
-  -H "Content-Type: application/json" \
-  -d '{"config_name": "dhcp"}'
-```
-
-### Get Tool Manifest
-
-```bash
-curl http://localhost:9096/api/tools/get_router_info/manifest
-```
-
-### Tool Manifest Response
+### Tool Manifest Shape
 
 ```json
 {
   "name": "get_router_info",
-  "version": "1.2.0",
+  "version": "4.0.0",
   "risk": "READ",
   "side_effects": "read",
   "idempotent": true,
@@ -377,27 +322,6 @@ curl http://localhost:9096/api/tools/get_router_info/manifest
   "latency": "moderate",
   "cost": "cheap"
 }
-```
-
-### Docker Run
-
-```bash
-docker run -d \
-  --name openwrt-mcp \
-  -p 9094:9094 -p 9095:9095 -p 9096:9096 \
-  -e OPENWRT_HOST=192.168.0.1 \
-  -e OPENWRT_SSH_KEY=/app/keys/openwrt_id_ed25519 \
-  -e MCP_UNSAFE_PUBLIC_ACCESS_CONFIRMED=1 \
-  -v ./keys:/app/keys:ro \
-  ghcr.io/paulomac1000/openwrt-mcp:latest
-```
-
-### Build and Verify Docker Image
-
-```bash
-docker build -t openwrt-mcp .
-docker run --rm openwrt-mcp python -c \
-  "from openwrt_mcp.server import get_tool_count; print(get_tool_count())"
 ```
 
 ### Run Unit Tests

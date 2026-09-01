@@ -4,16 +4,14 @@
 
 ```
 ┌──────────────────┐
-│  MCP client      │   Claude / opencode / LibreChat / VS Code
+│  MCP client      │   Claude / opencode / VS Code
 └────────┬─────────┘
-         │  stdio  (NEW)
-         │  OR  SSE / streamable-http
+         │  stdio (stdin/stdout)
          ▼
 ┌──────────────────┐
-│  openwrt-mcp     │   Python — FastMCP v3
+│  openwrt-mcp     │   Python — FastMCP v3, one process
 │  ┌────────────┐  │
-│  │ server.py  │──┼─► health :9094 (SSE mode only)
-│  │            │  │   REST   :9096 (SSE mode only)
+│  │ server.py  │  │   mcp.run(transport="stdio")
 │  └─────┬──────┘  │
 │        │         │
 │  ┌─────▼──────┐  │
@@ -31,11 +29,13 @@
 └──────────────────┘
 ```
 
+One process, one transport, one boundary (stdout). There is no HTTP sidecar.
+
 ## Module map
 
 | Module | Role |
 |---|---|
-| `openwrt_mcp.server` | FastMCP server, transport selection, health/REST threads (SSE mode only) |
+| `openwrt_mcp.server` | FastMCP server, stdio transport, tool helpers |
 | `openwrt_mcp.tools.registration` | Tool catalog, write-tool gating |
 | `openwrt_mcp.tools.explorer` | Read-only tool implementations (24) |
 | `openwrt_mcp.tools.writer` | Write tool implementations (5) — gated by `ENABLE_WRITE_OPERATIONS=1` |
@@ -44,18 +44,13 @@
 | `openwrt_mcp.sanitizer` | Secret/credential redaction in logs and responses |
 | `openwrt_mcp.observability` | Per-request IDs, structured logging |
 
-## Transports
+## Transport
 
-Two transports are supported via `--transport`:
+**stdio only.** MCP over stdin/stdout. The client (opencode, Claude Desktop, …)
+owns the process lifecycle. `uv run openwrt-mcp` binds no ports.
 
-- **`stdio`** (NEW in 3.5.0) — MCP over stdin/stdout. The client (opencode,
-  Claude Desktop, …) owns the process lifecycle. Health/REST servers are not
-  started — they would just bind ports nothing uses. This is the recommended
-  transport for single-user setups.
-- **`sse`** — MCP over Server-Sent Events on `MCP_SSE_PORT` (default 9095).
-  Useful when multiple clients share one server, or when the client only
-  supports HTTP-based transports (LibreChat). Also starts a health endpoint
-  on 9094 and a REST API on 9096.
+SSE / Health / REST sidecars were removed in 4.0.0. HTTP-based MCP clients
+should sit behind a stdio→HTTP bridge rather than this process.
 
 ## Security layers (defence in depth)
 

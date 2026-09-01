@@ -91,9 +91,10 @@ job. WiFi pre-shared keys (`key='...'`) are the secret and are redacted.
 - **WiFi PSKs as a structural pattern, not as content.** If a UCI value is
   named in a way not covered by the redaction pattern, it can leak. The pattern
   set is wide enough to cover all upstream UCI sections but is not a parser.
-- **Health (9094) and REST (9096) servers have no auth layer.** They bind to
-  `127.0.0.1` by default. Never set `MCP_UNSAFE_PUBLIC_ACCESS_CONFIRMED=1`
-  in this mode.
+- **v4.0.0 removed the HTTP surface.** SSE, Health, and REST sidecars are
+  gone, so the former unauthenticated-local-HTTP and
+  `MCP_UNSAFE_PUBLIC_ACCESS_CONFIRMED` limitations no longer apply. The only
+  process boundary is stdio owned by the MCP client.
 - **Single-router assumption.** Host-key pinning is per host:port, not per
   fingerprint — you can have one entry per router.
 - **`OPENWRT_HOST_KEY_POLICY=none`** explicitly disables all host-key checks.

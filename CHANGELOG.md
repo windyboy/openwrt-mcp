@@ -1,5 +1,25 @@
 # Changelog
 
+## [4.0.0] — 2026-09-01
+
+### Breaking
+- **SSE / Health / REST sidecars removed.** `openwrt-mcp` speaks MCP over
+  stdio only. `main()` takes no `--transport` flag and binds no ports.
+- **Environment variables removed:** `MCP_TRANSPORT`, `MCP_SSE_PORT`,
+  `HEALTH_PORT`, `REST_API_PORT`, `MCP_UNSAFE_PUBLIC_ACCESS_CONFIRMED`.
+- **Dependencies dropped:** `starlette` and `uvicorn`.
+- **Docker packaging deleted:** `Dockerfile` and `docker-compose.yml` are
+  gone from the repo. The GHCR publish workflow is gone with them.
+
+### Migration
+- SSE / HTTP MCP clients should sit behind a stdio→HTTP bridge; this
+  process no longer serves an HTTP MCP endpoint.
+- Docker / compose users should drop those files and run
+  `uv run openwrt-mcp` directly, with the SSH key directory available to
+  the process (no port publishes).
+- systemd units that `ExecStart=` the old SSE daemon should be stopped
+  and disabled; the MCP client should spawn the process on demand.
+
 ## [3.5.0] — 2026-09-01
 
 ### Feature: local-stdio MCP transport

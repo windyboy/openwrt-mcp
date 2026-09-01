@@ -25,11 +25,8 @@ vars the server uses (`OPENWRT_HOST`, `OPENWRT_SSH_KEY`, ...).
 ## Running locally
 
 ```bash
-# stdio (for local MCP clients — preferred for single-user setups)
-uv run openwrt-mcp --transport stdio
-
-# SSE on 127.0.0.1:9095 (for HTTP-based clients like LibreChat)
-uv run openwrt-mcp --transport sse
+# stdio — the MCP client owns the process
+uv run openwrt-mcp
 ```
 
 ## Pull request checklist

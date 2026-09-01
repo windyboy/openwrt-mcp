@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openwrt-mcp"
-version = "3.5.0"
+version = "4.0.0"
 description = "MCP server for OpenWRT router management, diagnostics, and write operations"
 requires-python = ">=3.14"
 dependencies = [
