@@ -45,6 +45,56 @@ class TestValidatorHardening:
         assert ok
 
 
+class TestWritePathValidation:
+    def test_happy_path_uci_set_still_allowed(self):
+        ok, msg = SecurityValidator.validate_write_command("uci set network.wan.ipaddr=10.0.0.1")
+        assert ok, msg
+
+    def test_command_substitution_rejected(self):
+        ok, msg = SecurityValidator.validate_write_command("uci set network.lan.ipaddr=$(reboot)")
+        assert not ok
+        assert "Blocked dangerous character" in msg
+
+    def test_backticks_rejected(self):
+        ok, msg = SecurityValidator.validate_write_command("uci set network.lan.ipaddr=`id`")
+        assert not ok
+        assert "Blocked dangerous character" in msg
+
+    def test_semicolon_rejected(self):
+        ok, msg = SecurityValidator.validate_write_command(
+            "uci set network.lan.hostname=foo;reboot"
+        )
+        assert not ok
+        assert "Blocked dangerous character" in msg
+
+    def test_newline_rejected(self):
+        ok, msg = SecurityValidator.validate_write_command(
+            "uci set network.lan.hostname=foo\nreboot"
+        )
+        assert not ok
+        assert "Blocked dangerous character" in msg
+
+    def test_carriage_return_rejected(self):
+        ok, _ = SecurityValidator.validate_write_command("uci set network.lan.hostname=foo\rreboot")
+        assert not ok
+
+    def test_uci_value_allowlist_rejects_quotes_and_spaces(self):
+        ok, _ = SecurityValidator.validate_uci_value("foo;reboot")
+        assert not ok
+        ok, _ = SecurityValidator.validate_uci_value("a b")
+        assert not ok
+        ok, _ = SecurityValidator.validate_uci_value("x'y")
+        assert not ok
+        ok, msg = SecurityValidator.validate_uci_value("10.0.0.1")
+        assert ok, msg
+        ok, msg = SecurityValidator.validate_uci_value("/etc/config/network")
+        assert ok, msg
+        ok, _ = SecurityValidator.validate_uci_value("")
+        assert not ok
+        ok, _ = SecurityValidator.validate_uci_value(0)  # type: ignore[arg-type]
+        assert not ok
+
+
 # ---------------------------------------------------------------------------
 # known_hosts helpers
 # ---------------------------------------------------------------------------
