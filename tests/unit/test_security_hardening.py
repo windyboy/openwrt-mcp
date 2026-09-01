@@ -51,9 +51,7 @@ class TestWritePathValidation:
         assert ok, msg
 
     def test_command_substitution_rejected(self):
-        ok, msg = SecurityValidator.validate_write_command(
-            "uci set network.lan.ipaddr=$(reboot)"
-        )
+        ok, msg = SecurityValidator.validate_write_command("uci set network.lan.ipaddr=$(reboot)")
         assert not ok
         assert "Blocked dangerous character" in msg
 
@@ -77,9 +75,7 @@ class TestWritePathValidation:
         assert "Blocked dangerous character" in msg
 
     def test_carriage_return_rejected(self):
-        ok, _ = SecurityValidator.validate_write_command(
-            "uci set network.lan.hostname=foo\rreboot"
-        )
+        ok, _ = SecurityValidator.validate_write_command("uci set network.lan.hostname=foo\rreboot")
         assert not ok
 
     def test_uci_value_allowlist_rejects_quotes_and_spaces(self):
